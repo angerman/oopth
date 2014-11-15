@@ -9,7 +9,7 @@ import OOPTH.Data
 foreign export ccall getAction :: IO (StablePtr Action)
 
 getAction :: IO (StablePtr Action)
-getAction = newStablePtr $ SimpleAction testLocaleEncoding
+getAction = newStablePtr $ IOAction testLocaleEncoding
 
 testLocaleEncoding :: IO ()
 testLocaleEncoding = do

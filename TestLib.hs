@@ -12,5 +12,5 @@ foreign export ccall getAction :: IO (StablePtr Action)
 getAction :: IO (StablePtr Action)
 getAction = newStablePtr $ StringAction test
 
-test :: String -> IO String
+test :: Monad m => String -> m String
 test = return . map toUpper

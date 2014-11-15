@@ -3,6 +3,7 @@ module OOPTH.Data where
 
 import Language.Haskell.TH.Syntax (Quasi, Exp)
 
-data Action = SimpleAction (IO ())
-            | StringAction (String -> IO String)
-            | TemplHAction (Quasi m => m Exp)
+data Action = IOAction     (IO ())
+            | StringAction (Monad m => String -> m String)
+            | QuasiAction  (Quasi m => m Exp)
+
