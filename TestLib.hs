@@ -5,12 +5,12 @@ module TestLib where
 import Data.Char (toUpper)
 import Foreign.StablePtr
 
-data Action = Action (String -> IO String)
+import OOPTH.Data
 
 foreign export ccall getAction :: IO (StablePtr Action)
 
 getAction :: IO (StablePtr Action)
-getAction = newStablePtr $ Action test
+getAction = newStablePtr $ StringAction test
 
 test :: String -> IO String
 test = return . map toUpper

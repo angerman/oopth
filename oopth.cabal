@@ -15,13 +15,20 @@ build-type:          Simple
 -- extra-source-files:  
 cabal-version:       >=1.10
 
-executable oopth
+executable oopth-test
   main-is:             Main.hs
   -- other-modules:       
   -- other-extensions:    
   build-depends:       base >=4.7 && <4.8
                       ,unix >=2.7
   -- hs-source-dirs:      
+  default-language:    Haskell2010
+
+executable oopth-runner
+  main-is:             Runner.hs
+  build-depends:       base >=4.7 && <4.8
+                      ,unix >=2.7
+                      ,template-haskell
   default-language:    Haskell2010
 
 -- TODO: This does not work yet.
