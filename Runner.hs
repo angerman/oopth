@@ -1,7 +1,7 @@
 {-# LANGUAGE Rank2Types #-}
 module Main where
 
-import System.IO (FilePath)
+import System.IO (hFlush, stdout, FilePath)
 import Control.Monad (forever)
 
 import OOPTH.Data
@@ -14,6 +14,9 @@ waitForNewLibraryFile = getLine
 
 main :: IO ()
 main = forever $ do
+  putStrLn "Please enter the filepath to library with QuasiAction"
+  putStr "OOPTH Runner> "
+  hFlush stdout
   file   <- waitForNewLibraryFile
   action <- loadQuasiActionFromLibrary file
   print =<< runQ action

@@ -8,6 +8,7 @@ cabal-dev
 *.dyn_hi
 *.dylib
 *_stub.h
+.#*
 .virtualenv
 .hpc
 .hsenv
