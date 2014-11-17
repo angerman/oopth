@@ -1,5 +1,6 @@
+{-# LANGUAGE QuasiQuotes, TemplateHaskell #-}
 module Main where
-import Language.Haskell.TH.Syntax (Quasi, Exp(ConE), mkName)
+import Language.Haskell.TH.Syntax --(Quasi, Exp(ConE), mkName)
 import Serialized
 import Outputable
 import Binary
@@ -13,7 +14,7 @@ main = do
   putStrLn "wrote"
 
 exampleExp :: Exp
-exampleExp = ConE (mkName "Nothing")
+exampleExp = InfixE (Just (LitE (IntegerL 1))) (VarE $ mkName "+") (Just (LitE (IntegerL 2))) --[|1+1|]--(mkName "Nothing")
 
 exampleExpr :: Quasi m => m Exp
 exampleExpr = return exampleExp
