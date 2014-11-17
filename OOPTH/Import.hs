@@ -15,7 +15,8 @@ foreign import ccall "dynamic" unwrap :: FunPtr WrappedAction -> WrappedAction
 loadActionFromLibrary :: FilePath -> IO Action
 loadActionFromLibrary file = do
   dl             <- dlopen file []
-  wrappedAction  <- dlsym dl "getAction"
+  wrappedAction  <- dlsym dl "THTestLib_getAction_info"--getAction"
+  putStrLn . show $ wrappedAction
   action         <- unwrap  wrappedAction
   deRefStablePtr action
 

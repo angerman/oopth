@@ -8,6 +8,14 @@ import Serialized
 import Data.Typeable (Typeable)
 import Data.Data (Data)
 
+import OOPTH.Data
+import OOPTH.Import
+
+import Language.Haskell.TH.Syntax (Quasi, Exp, runQ)
+
+waitForNewLibraryFile :: IO FilePath
+waitForNewLibraryFile = getLine
+
 waitForNewDataFile :: IO FilePath
 waitForNewDataFile = getLine
 
@@ -27,11 +35,11 @@ serializeResultToFile file result = do
 
 main :: IO ()
 main = forever $ do
-  putStrLn "Please enter the filepath to the QuasiData"
+  putStrLn "Please enter the filepath to library with QuasiAction"
   putStr "OOPTH Runner> "
   hFlush stdout
-  file   <- waitForNewDataFile
-  action <- deserializeActionFromFile file
+  file   <- waitForNewLibraryFile
+  action <- loadQuasiActionFromLibrary file
   result <- runQ action
   print result
   _      <- serializeResultToFile (file ++ "c") result
