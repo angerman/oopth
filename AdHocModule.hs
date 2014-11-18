@@ -32,20 +32,18 @@ import Packages
 import Data.List ( find )
 
 {-
-We try to build a module similar to
+The goal is to use the ThCargo.hs file as a base, adjust the
+module name into something temporary, and replace the `undefined`
+node with the acutal th splice.  (e.g. obtained from the
+`hscCompileCoreExpr` (HscMain.hs) though the `hscCompileCoreExprHook`.
 
-module ThCargo where
-import Foreign.StablePtr
-import Language.Haskell.TH.Syntax ( Quasi, Exp(ConE), mkName )
-import OOPTH.Data
+Or though the (new) `runMeta` hook. (See preliminary patch: http://lpaste.net/114451)
 
-foreign export ccall "getAction" getAction :: IO (StablePtr Action)
+Note: Alternatively one could construct the module by hand as well.
 
-getAction :: IO (StablePtr Action)
-getAction = newStablePtr $ QuasiAction exampleExpr
+run with
 
-exampleExpr :: Quasi m => m Exp
-exampleExpr = return (ConE (mkName "Nothing"))
+$ cabal run oopth-adhoc-module 
 -}
 
 main :: IO ()
@@ -98,22 +96,3 @@ main = do
           putStrLn "Done!"
         return ()
       Nothing -> panic "failed to locate module"
-
-mkAdHocModule :: HsModule RdrName
-mkAdHocModule = HsModule (Just (noLoc . mkModuleName $ "ThCargo")) Nothing imports decls Nothing Nothing
-  where
-    imports = map (noLoc . simpleImportDecl . mkModuleName) ["Foreign.StablePtr"
-                                                            ,"Language.Haskell.TH.Syntax"
-                                                            ,"OOPTH.Data"]
-    decls   = [noLoc mkExportDecl]
-
-mkExportDecl :: HsDecl RdrName
-mkExportDecl = ForD (ForeignExport (noLoc v) (noLoc ty)
-                     noForeignExportCoercionYet
-                     (CExport (CExportStatic (mkFastString "getAction") CCallConv)))
-    where
-      v    = mkVarUnqual . mkFastString $ "getAction"
-      -- Build type: IO (StablePtr Action)
-      ty   = HsAppTy (mkTV "IO") (noLoc $ HsAppTy (mkTV "StablePtr") (mkTV "Action"))
-      -- creates an unqualified typevariable with no location from a String.
-      mkTV = noLoc . HsTyVar . mkVarUnqual . mkFastString
