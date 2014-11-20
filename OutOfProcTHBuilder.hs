@@ -62,7 +62,7 @@ myRunPhaseHook expr rp fp df = do
           injected     <- liftIO $ injectSplice df expr program
           let guts'    = guts { cg_binds = injected }
           liftIO $ putStrLn . (showSDoc df) . ppr $ program
-          liftIO $ putStrLn "=============================="
+          liftIO $ putStrLn "==== After Injection ===="
           liftIO $ putStrLn . (showSDoc df) . ppr $ injected
           return $ HscOut hscSource moduleName (HscRecomp guts' modSummary)
         otherwise -> panic "This was not expected"
