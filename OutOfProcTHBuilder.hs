@@ -83,7 +83,7 @@ buildDynamicLib master_dflags expr = do
     -- adjust the dynflags to contain RankNTypes.
     let dflags = (dflags_ `xopt_set` Opt_RankNTypes) { verbosity = 0 }
     -- configure the dynflags by parsing -no-hs-main, -dynamic and -shared.
-    (dflags', _, _) <- parseDynamicFlagsCmdLine dflags $ map noLoc (words "-no-hs-main -dynamic -shared")
+    (dflags', _, _) <- parseDynamicFlagsCmdLine dflags $ map noLoc (words "-no-hs-main -dynamic -shared -dcore-lint")
 
     -- finally set the flags to the session and initialize and load the
     -- package set.
