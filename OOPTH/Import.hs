@@ -7,7 +7,7 @@ import Foreign.StablePtr
 import Foreign.Ptr (FunPtr)
 import Language.Haskell.TH.Syntax (Quasi, Exp)
 
-import OOPTH.Data
+data Action = QuasiAction  (Quasi m => m Exp)
 
 type WrappedAction = IO (StablePtr Action)
 foreign import ccall "dynamic" unwrap :: FunPtr WrappedAction -> WrappedAction
@@ -15,11 +15,12 @@ foreign import ccall "dynamic" unwrap :: FunPtr WrappedAction -> WrappedAction
 loadActionFromLibrary :: FilePath -> IO Action
 loadActionFromLibrary file = do
   dl             <- dlopen file []
-  wrappedAction  <- dlsym dl "THTestLib_getAction_info"--getAction"
+  wrappedAction  <- dlsym dl "getAction"
   putStrLn . show $ wrappedAction
   action         <- unwrap  wrappedAction
   deRefStablePtr action
 
+{-
 loadIOActionFromLibrary :: FilePath -> IO (IO ())
 loadIOActionFromLibrary file = do
   IOAction a     <- loadActionFromLibrary file
@@ -29,7 +30,7 @@ loadStringActionFromLibrary :: Monad m => FilePath -> IO (String -> m String)
 loadStringActionFromLibrary file = do
   StringAction a <- loadActionFromLibrary file
   return a
-
+-}
 loadQuasiActionFromLibrary :: Quasi m => FilePath -> IO (m Exp)
 loadQuasiActionFromLibrary file = do
   QuasiAction a  <- loadActionFromLibrary file

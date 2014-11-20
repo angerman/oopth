@@ -1,7 +1,7 @@
 {-# LANGUAGE Rank2Types #-}
 module ThCargo where
 import Foreign.StablePtr
-import Language.Haskell.TH.Syntax ( Quasi, Exp(ConE), mkName )
+import Language.Haskell.TH.Syntax ( Quasi, Exp(LitE), Lit(StringL) {-Exp(ConE), mkName -})
 
 foreign export ccall "getAction" getAction :: IO (StablePtr Action)
 
@@ -11,4 +11,4 @@ getAction :: IO (StablePtr Action)
 getAction = newStablePtr $ QuasiAction (return shippedSplice)
 
 shippedSplice :: Exp
-shippedSplice = undefined
+shippedSplice = LitE $ StringL "Nothing"
