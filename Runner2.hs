@@ -8,6 +8,8 @@ import Serialized
 import Data.Typeable (Typeable)
 import Data.Data (Data)
 
+import System.Environment (getArgs)
+
 import OOPTH.Data
 import OOPTH.Import
 
@@ -34,13 +36,21 @@ serializeResultToFile file result = do
   writeBinMem h file
 
 main :: IO ()
-main = forever $ do
-  putStrLn "Please enter the filepath to library with QuasiAction"
-  putStr "OOPTH Runner> "
-  hFlush stdout
-  file   <- waitForNewLibraryFile
-  action <- loadQuasiActionFromLibrary file
-  result <- runQ action
-  print result
-  _      <- serializeResultToFile (file ++ "c") result
-  putStrLn $ "wrote " ++ file ++ "c"
+main = do
+  args <- getArgs
+  case args of
+    (inputFile:outputFile:[]) -> do
+      action <- loadQuasiActionFromLibrary inputFile
+      result <- runQ action
+      _      <- serializeResultToFile outputFile result
+      return ()
+    _ -> forever $ do
+      putStrLn "Please enter the filepath to library with QuasiAction"
+      putStr "OOPTH Runner> "
+      hFlush stdout
+      file   <- waitForNewLibraryFile
+      action <- loadQuasiActionFromLibrary file
+      result <- runQ action
+      print result
+      _      <- serializeResultToFile (file ++ "c") result
+      putStrLn $ "wrote " ++ file ++ "c"
