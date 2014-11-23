@@ -1,31 +1,35 @@
 {-# OPTIONS_GHC -O0 #-}
-{-# LANGUAGE CPP, DeriveGeneric, LambdaCase, MagicHash, StandaloneDeriving #-}
+{-# LANGUAGE CPP, DeriveGeneric, LambdaCase, MagicHash, StandaloneDeriving, DeriveDataTypeable #-}
 
 {- |
      Communication between the compiler (GHCJS) and runtime (on node.js) for
      Template Haskell
+
+     Obtained 22.11.2014 from GitHub (659d6ce)
+     Adapted to work outside of GHCJS
  -}
 
-module GHCJS.Prim.TH.Types ( Message(..)
+module Types ( Message(..)
                            , THResultType(..)
                            ) where
 
 import           Control.Applicative
 
 import           Data.Binary
-import           Data.ByteString (ByteString)
+import           Data.ByteString as BS (ByteString, length)
 import           Data.Word
+import           Data.Typeable
 
 import           GHC.Generics
 import           GHC.Exts
 
-import           GHCJS.Prim.TH.Serialized
+--import           GHCJS.Prim.TH.Serialized
 
 import qualified Language.Haskell.TH        as TH
 import qualified Language.Haskell.TH.Syntax as TH
 
 data THResultType = THExp | THPat | THType | THDec | THAnnWrapper
-  deriving (Enum, Generic)
+  deriving (Enum, Generic, Show)
 
 data Message
   -- | compiler to node requests
@@ -59,14 +63,38 @@ data Message
   -- | exit with error status
   | QFail             String
   | QException        String
-  deriving (Generic)
+  deriving (Typeable, Generic)
+
+instance Show Message where
+  show (RunTH r bs mbloc)   = "RunTH " ++ show r ++ (show $ BS.length bs) ++ "bytes"
+  show FinishTH             = "FinishTH"
+  show (RunTH' bs)          = "RunTH' " ++ (show $ BS.length bs) ++ "bytes"
+  show FinishTH'            = "FinishTH'"
+  show (NewName name)       = "NewName " ++ name
+  show (Report b s)         = "Report " ++ (show b) ++ " " ++ s
+  show (LookupName b s)     = "LookupName " ++ (show b) ++ " " ++ s
+  show (Reify n)            = "Reify " ++ (show n)
+  show (ReifyInstances n t) = "ReifyInstances " ++ (show n) ++ " :: " ++ (show t)
+  show (ReifyRoles n)       = "ReifyRoles " ++ (show n)
+  show (ReifyAnnotations a) = "ReifyAnnotations " ++ (show a)
+  show (ReifyModule m)      = "ReifyModule " ++ (show m)
+  show (AddDependentFile f) = "AddDependentFile " ++ f
+  show (AddTopDecls d)      = "AddTopDecls " ++ (show d)
+  show (NewName' n)         = "NewName' " ++  (show n)
+  show Report'              = "Report'"
+  show (LookupName' n)      = "LookupName' " ++ (show n)
+  show (Reify' i)           = "Reify' " ++ (show i)
+  show (ReifyInstances' ds) = "ReifyInstances' " ++ (show ds)
+  show (ReifyRoles' rs)     = "ReifyRoles' " ++ (show rs)
+  show (ReifyAnnotations' bs) = "ReifyAnnotations' " ++ (show $ sum $ map BS.length bs) ++ "bytes"
+  show (ReifyModule' i)     = "ReifyModule' " ++ (show i)
+  show AddDependentFile'    = "AddDependentFile'"
+  show AddTopDecls'         = "AddTopDecls'"
+  show (QFail s)            = "QFail " ++ s
+  show (QException s)       = "QException " ++ s
 
 instance Binary THResultType
 instance Binary Message
-
-#if MIN_VERSION_template_haskell(2,10,0)
-#error "unsupported template-haskell version"
-#elif MIN_VERSION_template_haskell(2,9,0)
 
 deriving instance Generic TH.Loc
 deriving instance Generic TH.Name
@@ -164,8 +192,4 @@ instance Binary TH.Con
 instance Binary TH.AnnLookup
 instance Binary TH.ModuleInfo
 instance Binary TH.Clause
-
-#else
-#error "unsupported template-haskell version"
-#endif
 

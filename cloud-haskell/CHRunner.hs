@@ -14,34 +14,11 @@ import Data.ByteString.Lazy as BL (ByteString, toStrict)
 import OOPTH.Data
 import OOPTH.Import
 
-import Language.Haskell.TH.Syntax as TH (Q(..), Quasi, Exp, runQ)
-import Language.Haskell.TH as TH
-import Data.Typeable (Typeable)
-import Data.Data (Data)
-import Serialized (Serialized, toSerialized, serializeWithData, fromSerialized, deserializeWithData)
-import qualified Binary as GHCB
-import Data.Binary (Binary, Get, get, put)
-import Data.Binary.Put (runPut)
+import Types
+import Eval
 
-import Control.Applicative ((<$>))
+import           Data.IORef
 
-anyToByteString :: (Typeable a, Data a) => a -> IO B.ByteString
-anyToByteString e = do
-  let dat = toSerialized serializeWithData e
-  h  <- GHCB.openBinMem (4096*2) -- 8 MegaByte
-  _  <- GHCB.put_ h dat
-  GHCB.get h
-
-byteStringToAny :: (Typeable a, Data a) => B.ByteString -> IO a
-byteStringToAny bs = do
-  h <- GHCB.openBinMem (4096*2)
-  _ <- GHCB.put_ h bs
-  s <- GHCB.get h :: IO Serialized
-  let Just ret = fromSerialized deserializeWithData s
-  return ret
-
-runTHCode :: Binary a => TH.Q a -> TH.Q B.ByteString
-runTHCode c = BL.toStrict . runPut . put <$> TH.runQ c
 {-
 instance Binary Serialized where
   put s = do
@@ -81,53 +58,34 @@ master :: Backend -> [NodeId] -> Process ()
 master backend slaves = do
   us <- getSelfPid
   -- Do something interesting with the slaves
-  liftIO . putStrLn $ "Slaves: " ++ show slaves
+  log $ "[Client] Slaves: " ++ show slaves
   let firstSlave = head slaves
-  pid <- spawn firstSlave (reverseClosure us)
+  pid <- spawn firstSlave (runTHServerClosure us)
+  log "[Client] Reading file..."
   payload <- liftIO $ B.readFile "a.out"
-  send pid payload
-  dat <- (expect :: Process B.ByteString) -- >>= return . return :: (Process (IO Exp))
-  resp <- liftIO $ (byteStringToAny dat :: IO Exp)
---  let Just resp = fromSerialized deserializeWithData dat :: Maybe Exp
-  liftIO . putStrLn $ "Received: " ++ (show resp)
+  log "[Client] Sending Message..."
+  send pid $ RunTH THExp payload Nothing
+  log "[Client] Awaiting response..."
+  msg <- expect :: Process Types.Message
+  case msg of
+    RunTH' bsr -> log $ "[Client] Received: " ++ (show bsr)
+    _ -> log $ "[Client] Received: " ++ (show msg)
   -- Terminate the slaves when the master terminates (this is optional)
   terminateAllSlaves backend
-
-sendReverse :: ProcessId -> Process ()
-sendReverse them = do
-  s <- expect :: Process String
-  send them $ reverse s
-
-runQAction :: ProcessId -> Process ()
-runQAction them = go 0
-  where go :: Int -> Process ()
-        go n = do
-          log $ "[1 of 5] waiting for lib" ++ (show n)
-          payload <- expect :: Process B.ByteString
-          log $ "[2 of 5] received lib" ++ (show n)
-          liftIO $ B.writeFile (lib n) payload
-          log $ "[3 of 5] wrote lib" ++ (show n)
-          action <- liftIO $ loadQuasiActionFromLibrary (lib n)
-          log $ "[4 of 5] running action for lib" ++ (show n)
-          Q result <- return $ (runQ action :: Q Exp)
-          resultBS <- liftIO $ anyToByteString (result :: Exp)
-          log $ "[5 of 5] returing result for lib" ++ (show n)
-          send them resultBS
-          go (n+1)
-        log = liftIO . putStrLn
-        lib n = "lib" ++ (show n) ++ ".dylib"
+  where
+    log = liftIO . putStrLn
 
 -- cloud-haskell-boilerplate
 decodeProcessIdStatic :: Static (ByteString -> ProcessId)
 decodeProcessIdStatic = staticLabel "$decodeProcessId"
 
-runQActionStatic :: Static (ProcessId -> Process ())
-runQActionStatic = staticLabel "$runQAction"
+runTHServerStatic :: Static (ProcessId -> Process ())
+runTHServerStatic = staticLabel "$runTHServer"
 
-reverseClosure :: ProcessId -> Closure (Process ())
-reverseClosure pid = closure decoder (encode pid)
+runTHServerClosure :: ProcessId -> Closure (Process ())
+runTHServerClosure pid = closure decoder (encode pid)
   where decoder :: Static (ByteString -> Process ())
-        decoder = runQActionStatic `staticCompose` decodeProcessIdStatic
+        decoder = runTHServerStatic `staticCompose` decodeProcessIdStatic
 
 --------------------------------------------------------------------------------
 -- Slave
@@ -153,6 +111,6 @@ main = do
       backend <- initializeBackend host port rtable 
       startSlave backend
   where
-    rtable = registerStatic "$runQAction" (toDynamic runQAction)
+    rtable = registerStatic "$runTHServer" (toDynamic runTHServer)
            . registerStatic "$decodeProcessId" (toDynamic (decode :: ByteString -> ProcessId))
            $ initRemoteTable

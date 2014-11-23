@@ -7,17 +7,24 @@ import Foreign.StablePtr
 import Foreign.Ptr (FunPtr)
 import Language.Haskell.TH.Syntax (Quasi, Exp)
 
-data Action = QuasiAction  (Quasi m => m Exp)
+import GHC.Prim (Any)
+
+data Action = QuasiAction Any -- (This will be Quasi m => m Exp, or a like)
+
 
 type WrappedAction = IO (StablePtr Action)
 foreign import ccall "dynamic" unwrap :: FunPtr WrappedAction -> WrappedAction
 
 loadActionFromLibrary :: FilePath -> IO Action
 loadActionFromLibrary file = do
+  putStrLn "Loading dylib..."
   dl             <- dlopen file []
+  putStrLn "Looking up symbol..."
   wrappedAction  <- dlsym dl "getAction"
   putStrLn . show $ wrappedAction
+  putStrLn "Unwrapping action..."
   action         <- unwrap  wrappedAction
+  putStrLn "Dereferencing stable ptr..."
   deRefStablePtr action
 
 {-
@@ -31,7 +38,7 @@ loadStringActionFromLibrary file = do
   StringAction a <- loadActionFromLibrary file
   return a
 -}
-loadQuasiActionFromLibrary :: Quasi m => FilePath -> IO (m Exp)
+loadQuasiActionFromLibrary :: FilePath -> IO Any
 loadQuasiActionFromLibrary file = do
   QuasiAction a  <- loadActionFromLibrary file
   return a
