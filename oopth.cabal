@@ -37,7 +37,7 @@ executable oopth-runner-2
   build-depends:       base >=4.7 && <4.8
                       ,unix >=2.7
                       ,template-haskell
-                      ,ghc ==7.8.3
+                      ,ghc==7.8.3
   default-language:    Haskell2010
 
 executable oopth-adhoc-module
@@ -54,6 +54,12 @@ executable oopth-adhoc-module-2
                       ,ghc==7.8.3
                       ,ghc-paths
                       ,transformers
+  default-language:    Haskell2010
+
+executable oopth-ch-runner
+  main-is:             CHRunner.hs
+  build-depends:       base >= 4 && <5
+                      ,distributed-process-simplelocalnet
   default-language:    Haskell2010
 
 -- TODO: This does not work yet.
