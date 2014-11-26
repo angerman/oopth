@@ -52,21 +52,18 @@ import           Unsafe.Coerce
 
 -- DyLib loading
 import           OOPTH.Import              (loadQuasiActionFromLibrary)
--- cloud haskell
-import Control.Distributed.Process.Debug
-import Control.Distributed.Process (Process, ProcessId, send, expect, liftIO, receiveWait, matchAny)
-
 
 data QState = QState { qsMap        :: Map TypeRep Dynamic    -- ^ persistent data between splices in a module
                      , qsFinalizers :: [TH.Q ()]              -- ^ registered finalizers (in reverse order)
                      , qsMessages   :: IORef [(Bool, String)] -- ^ messages reported
                      , qsLocation   :: Maybe TH.Loc           -- ^ location for current splice, if any
-                     , qsPid        :: ProcessId
+                     , qsRecv       :: IO ByteString
+                     , qsSend       :: ByteString -> IO ()
                      }
 instance Show QState where show _ = "<QState>"
 
-initQState :: ProcessId -> IORef [(Bool, String)] -> QState
-initQState pid msgs = QState M.empty [] msgs Nothing pid
+initQState :: IO ByteString -> (ByteString -> IO ()) -> IORef [(Bool, String)] -> QState
+initQState recv send msgs = QState M.empty [] msgs Nothing recv send
 
 runModFinalizers :: GHCJSQ ()
 runModFinalizers = go =<< getState
@@ -75,7 +72,7 @@ runModFinalizers = go =<< getState
       putState (s { qsFinalizers = ff}) >> TH.runQ f >> getState >>= go
     go _ = return ()
 
-data GHCJSQ a = GHCJSQ { runGHCJSQ :: QState -> Process (a, QState) }
+data GHCJSQ a = GHCJSQ { runGHCJSQ :: QState -> IO (a, QState) }
 
 data GHCJSQException = GHCJSQException QState String
   deriving (Show, Typeable)
@@ -110,16 +107,19 @@ noLoc :: TH.Loc
 noLoc = TH.Loc "<no file>" "<no package>" "<no module>" (0,0) (0,0)
 
 sendRequest :: T.Message -> GHCJSQ T.Message
-sendRequest msg = GHCJSQ $ \s -> do
-  send (qsPid s) $ BL.toStrict $ runPut (put msg)
-  payload <- expect
-  let m = runGet get (BL.fromStrict payload)
-  return (m, s)
+sendRequest msg = sendResult msg >> awaitMessage
 
 sendResult :: T.Message -> GHCJSQ ()
 sendResult msg = GHCJSQ $ \s -> do
-  send (qsPid s) $ BL.toStrict $ runPut (put msg)
+  let bs = BL.toStrict $ runPut (put msg)
+  TH.qRunIO $ (qsSend s) bs
   return ((), s)
+
+awaitMessage :: GHCJSQ T.Message
+awaitMessage = GHCJSQ $ \s -> do
+  bs <- TH.qRunIO (qsRecv s)
+  let msg = runGet get (BL.fromStrict bs)
+  return (msg, s)
 
 instance TH.Quasi GHCJSQ where
   qNewName str = do
@@ -150,7 +150,7 @@ instance TH.Quasi GHCJSQ where
     T.ReifyModule' mi <- sendRequest $ T.ReifyModule m
     return mi
   qLocation = fromMaybe noLoc . qsLocation <$> getState
-  qRunIO m = GHCJSQ $ \s -> fmap (,s) (liftIO m)
+  qRunIO m = GHCJSQ $ \s -> fmap (,s) m
   qAddDependentFile file = do
     T.AddDependentFile' <- sendRequest $ T.AddDependentFile file
     return ()
@@ -165,8 +165,6 @@ instance TH.Quasi GHCJSQ where
     in return (lookup (qsMap s), s)
   qPutQ k = GHCJSQ $ \s ->
     return ((), s { qsMap = M.insert (typeOf k) (toDyn k) (qsMap s) })
-
-qRunProc p = GHCJSQ $ \s -> fmap (,s) p
 
 makeAnnPayload :: forall a. Data a => a -> ByteString
 makeAnnPayload x =
@@ -183,25 +181,22 @@ convertAnnPayloads bs = catMaybes (map convert bs)
                   Just (deserializeWithData . B.unpack . B.drop 16 $ b)
               | otherwise = Nothing
 
--- | the Template Haskell server (Cloud Haskell Edition)
-runTHServer :: ProcessId -> Process ()
-runTHServer pid = do
-  msgs <- liftIO $ newIORef []
-
-  traceLog "[Server] Starting..."
-  void (runGHCJSQ server (initQState pid msgs)) -- `E.catches`
---    [ E.Handler $ \(GHCJSQException _ msg) -> sendReportedMessages' msgs >> void (sendRequest pid $ QFail msg)
---    , E.Handler $ \(E.SomeException e)     -> sendReportedMessages' msgs >> void (sendRequest pid $ QException (show e))
---    ]
+-- | the Template Haskell server (Courier Edition)
+runTHServer :: IO ByteString -> (ByteString -> IO ()) ->  IO ()
+runTHServer recv send = do
+  msgs <- newIORef []
+  putStrLn $ "[Server] Starting..."
+  void (runGHCJSQ server (initQState recv send msgs)) {-`E.catches`
+    [ E.Handler $ \(GHCJSQException _ msg) -> sendReportedMessages' msgs >> void (sendRequest $ T.QFail msg)
+    , E.Handler $ \(E.SomeException e)     -> sendReportedMessages' msgs >> void (sendRequest $ T.QException (show e))
+    ]-}
   where
 --    server :: GHCJSQ a
     log :: String -> GHCJSQ ()
-    log = qRunProc . traceLog 
-    -- log = TH.qRunIO $ putStrLn
+    log = TH.qRunIO . putStrLn
     server = do
       log "[Server] Waiting for Message"
-      payload <- qRunProc expect
-      let msg = runGet get (BL.fromStrict payload)
+      msg <- awaitMessage
       log "[Server] Received Message"
       case msg of
         T.RunTH t code loc -> do

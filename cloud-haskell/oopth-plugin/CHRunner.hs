@@ -1,28 +1,36 @@
 module Main where
 
-import Control.Distributed.Process.Backend.SimpleLocalnet
+import Network.Endpoints
+import Network.Transport.TCP
+import Control.Concurrent (threadDelay)
+
 import System.Environment (getArgs)
-import Com
 
 import Unsafe.Coerce (unsafeCoerce)
 import qualified Language.Haskell.TH        as TH
 import qualified Language.Haskell.TH.Syntax as TH
 
 
+import OOPTH.Eval
+
 main :: IO ()
 main = do
   args <- getArgs
 
+  let master = "master"
+      slave  = "slave"
+      resolver = resolverFromList [(master, "localhost:2001"),
+                                   (slave,  "localhost:2000")]
+  transport <- newTCPTransport resolver
+
   case args of
-    ["master", host, port] -> do
-      backend <- initializeBackend host port rtable
-      startMaster backend (master backend)
-    ["test"] -> do
-      backend <- initializeBackend "localhost" "8081" rtable
-      putStrLn "Starting"
-      resp <- runLocal backend thClientProc
-      putStrLn $ show (unsafeCoerce resp :: TH.Exp)
-      putStrLn "Done"
-    ["slave", host, port] -> do
-      backend <- initializeBackend host port rtable 
-      startSlave backend
+    ["master"] -> undefined
+    ["test"] -> undefined
+    ["slave"] -> do
+      endpoint <- newEndpoint [transport]
+      Right () <- bindEndpoint endpoint slave
+      runTHServer (receiveMessage endpoint) (sendMessage_ endpoint master)
+      threadDelay 1000
+      unbindEndpoint endpoint slave
+      shutdown transport
+
