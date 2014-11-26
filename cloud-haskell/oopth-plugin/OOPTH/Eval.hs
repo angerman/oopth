@@ -111,13 +111,14 @@ noLoc = TH.Loc "<no file>" "<no package>" "<no module>" (0,0) (0,0)
 
 sendRequest :: T.Message -> GHCJSQ T.Message
 sendRequest msg = GHCJSQ $ \s -> do
-  send (qsPid s) msg
-  m <- expect
+  send (qsPid s) $ BL.toStrict $ runPut (put msg)
+  payload <- expect
+  let m = runGet get (BL.fromStrict payload)
   return (m, s)
 
 sendResult :: T.Message -> GHCJSQ ()
 sendResult msg = GHCJSQ $ \s -> do
-  send (qsPid s) msg
+  send (qsPid s) $ BL.toStrict $ runPut (put msg)
   return ((), s)
 
 instance TH.Quasi GHCJSQ where
@@ -199,7 +200,8 @@ runTHServer pid = do
     -- log = TH.qRunIO $ putStrLn
     server = do
       log "[Server] Waiting for Message"
-      msg <- qRunProc expect
+      payload <- qRunProc expect
+      let msg = runGet get (BL.fromStrict payload)
       log "[Server] Received Message"
       case msg of
         T.RunTH t code loc -> do

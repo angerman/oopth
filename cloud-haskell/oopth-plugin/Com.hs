@@ -7,7 +7,7 @@ import Control.Distributed.Process.Node (initRemoteTable, LocalNode, runProcess)
 import Control.Distributed.Process.Backend.SimpleLocalnet
 import Control.Distributed.Static (staticLabel, registerStatic, staticCompose)
 import Control.Distributed.Process.Internal.StrictMVar ( newEmptyMVar, putMVar, takeMVar )
-import Data.Binary (encode, decode, get)
+import Data.Binary (encode, decode, get, put)
 import           Data.Binary.Get
 import           Data.Binary.Put
 import Unsafe.Coerce (unsafeCoerce)
@@ -83,9 +83,10 @@ thClientProc slaves = do
       payload <- liftIO $ B.readFile "a.out"
       log $ "[Client] Read file: " ++ (show $ B.length payload) ++ " bytes"
       log "[Client] Sending Message..."
-      send pid $ (T.SimpleTH T.THExp payload Nothing :: T.Message)
+      send pid $ BL.toStrict $ runPut (put (T.RunTH T.THExp payload Nothing :: T.Message))
       log "[Client] Awaiting response..."
-      msg <- expect :: Process T.Message
+      payload <- expect :: Process B.ByteString
+      let msg = runGet get (BL.fromStrict payload)
       log "[Client] Received a response..."
       case msg of
         T.RunTH' bsr -> do

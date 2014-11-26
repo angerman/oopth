@@ -33,8 +33,7 @@ data THResultType = THExp | THPat | THType | THDec | THAnnWrapper
 
 data Message
   -- | compiler to node requests
-  = SimpleTH ByteString
-  | RunTH THResultType ByteString (Maybe TH.Loc)
+  = RunTH THResultType ByteString (Maybe TH.Loc)
   | FinishTH
   -- | node to compiler responses
   | RunTH'            ByteString -- ^ serialized result
@@ -67,7 +66,6 @@ data Message
   deriving (Typeable, Generic)
 
 instance Show Message where
-  show (SimpleTH bs)        = "SimpleTH " ++ (show $ BS.length bs) ++ " bytes"
   show (RunTH r bs mbloc)   = "RunTH " ++ show r ++ (show $ BS.length bs) ++ "bytes"
   show FinishTH             = "FinishTH"
   show (RunTH' bs)          = "RunTH' " ++ (show $ BS.length bs) ++ "bytes"

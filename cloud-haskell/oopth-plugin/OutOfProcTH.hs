@@ -86,7 +86,11 @@ compileCoreExpr hsc_env srcspan ds_expr = do
   putStrLn "=== Contacting Runner ==="
   backend <- initializeBackend "localhost" "8081" rtable
   result  <- runLocal backend thClientProc
-  putStrLn $ show (unsafeCoerce result :: Exp)
+  let exp = unsafeCoerce result :: Exp
+  putStrLn $ show exp
+  let qe :: Q Exp
+      qe = return exp 
+      hv = unsafeCoerce qe :: HValue
 --  result <- readHValueFromRunner "a.out"
 --  putStrLn $ showPpr dflags ds_expr
 --  prep_expr <- corePrepExpr dflags hsc_env ds_expr
@@ -105,7 +109,7 @@ compileCoreExpr hsc_env srcspan ds_expr = do
   --  2. Turn ce into a .dylib
   --  3. rund and execute the .dylib
   --  4. return the result.
-  return result
+  return hv
   where
 --    isNonQ   = show ty == "GHC.Desugar.AnnotationWrapper"
 --    symb n   = "h$thrunnerZCThRunner" <> T.pack (show n) <> "zithExpr"
