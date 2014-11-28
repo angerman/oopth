@@ -1,7 +1,7 @@
 # Out Of Process Template Haskell
 
 This project aims to implement the out of process template haskell strategie used in
-(ghcjs)[https://github.com/ghcjs/ghcjs] to haskell.  This would allow a hybrid strategie
+[ghcjs](https://github.com/ghcjs/ghcjs) to haskell.  This would allow a hybrid strategie
 where the compilere does not need to compile template haskell itself but defer that
 to a template haskell runner, that would in turn compile the splices.  For cross-compilation
 this would solve one of the main issues, which is that template haskell cross compiliation
