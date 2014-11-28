@@ -21,6 +21,10 @@ import Var            ( varName, mkGlobalVar )
 import Name           ( nameOccName )
 import OccName        ( OccName, mkVarOcc )
 import Id             ( mkVanillaGlobal )
+import StringBuffer   ( stringToStringBuffer )
+import Data.Time.Clock( getCurrentTime )
+import SysTools
+import Data.ByteString( ByteString, readFile )
 
 -- libdir :: FilePath
 -- libdir  = GHC_PATHS_LIBDIR
@@ -71,33 +75,69 @@ myRunPhaseHook expr rp fp df = do
   liftIO $ putStrLn $ "Phase " ++ (showSDoc df . ppr) rp ++ " -> " ++ (showSDoc df . ppr) result
   return (result, filePath)
 
-buildDynamicLib :: DynFlags -> CoreExpr -> IO ()
+buildDynamicLib :: DynFlags -> CoreExpr -> IO ByteString
 buildDynamicLib master_dflags expr = do
-  -- set up our container.
-  let file = "ThCargo.hs"
-      target = Target (TargetFile file Nothing) True Nothing
 
   -- start a ghc session
   runGhc (Just $ topDir master_dflags) $ do
     dflags_ <- getDynFlags
     -- adjust the dynflags to contain RankNTypes.
-    let dflags = (dflags_ `xopt_set` Opt_RankNTypes) { verbosity = 0 }
+    let dflags = (dflags_ `xopt_set` Opt_RankNTypes) { verbosity = 3 }
     -- configure the dynflags by parsing -no-hs-main, -dynamic and -shared.
+    -- -dcore-lint will throw us off, as soon as our core turns up invalid!
     (dflags', _, _) <- parseDynamicFlagsCmdLine dflags $ map noLoc (words "-no-hs-main -dynamic -shared -dcore-lint")
 
     -- finally set the flags to the session and initialize and load the
     -- package set.
     setSessionDynFlags dflags'
     (dflags'',_) <- liftIO $ initPackages dflags'
-    load LoadAllTargets
+
+    -- don't load targets.
+    -- we haven't set any, and this will just create an empty a.out :-/
+    -- load LoadAllTargets
+
+    -- set up our container.
+    (tmpFile, now) <- liftIO $ do
+      tmpFile <- newTempName dflags "hs"
+      putStrLn $ "Tempfile: " ++ tmpFile
+      touch dflags"File must exists, to be found" tmpFile
+      now <- getCurrentTime
+      return (tmpFile, now)
+
+    let --file = "ThCargo.hs"
+      moduleName = "ThCargo"
+      modName = mkModuleName moduleName
+      targetId = --TargetModule modName --
+                 TargetFile tmpFile Nothing
+      targetBody = unlines ["{-# LANGUAGE Rank2Types #-}"
+                           ,"module " ++ moduleName ++ " where"
+                           ,"import Foreign.StablePtr"
+                           ,"import Language.Haskell.TH.Lib ( ExpQ )"
+                           ,"import Language.Haskell.TH.Syntax ( Quasi, Exp(LitE), Lit(StringL) )"
+
+                           ,"foreign export ccall \"getAction\" getAction :: IO (StablePtr Action)"
+
+                           ,"data Action = QuasiAction  (ExpQ)"
+
+                           ,"getAction :: IO (StablePtr Action)"
+                           ,"getAction = newStablePtr $ QuasiAction shippedSplice"
+
+                           ,"shippedSplice :: ExpQ"
+                           ,"shippedSplice = return $ LitE (StringL \"Nothing\")"]
+
+      targetContents = Just (stringToStringBuffer targetBody, now)
+      target = --Target  True Nothing
+        Target targetId True targetContents
 
     -- add the new file as a target. If we had done this
     -- prior to load, we'd get compiled already.
-    addTarget target
 
+    addTarget target
     -- find the module in the odule graph, and compile and link it.
+    liftIO $ putStrLn "Running dependency analysis..."
     modGraph <- depanal [] True
-    case find ((== file) . msHsFilePath) modGraph of
+    liftIO $ putStrLn "Ran dependency analysis..."    
+    case find ((== modName) . ms_mod_name) modGraph of
       Just modSummary -> do
         liftIO $ do
           putStrLn "found module"
@@ -117,10 +157,14 @@ buildDynamicLib master_dflags expr = do
           putStrLn "Will Compile!"
           hmi <- compileOne hsc_env hookedModSummary 1 1 Nothing Nothing SourceModified
           putStrLn "Did Compile!"
-          linked <- link (ghcLink dflags'') dflags'' True (unitUFM (ms_mod modSummary) hmi)
+
+          productpath <- newTempName dflags'' ".so"
+          
+          linked <- link (ghcLink dflags'') (dflags'' { outputFile = Just productpath }) True (unitUFM (ms_mod modSummary) hmi)
           case linked of
             Succeeded -> putStrLn "Linked!"
             Failed    -> putStrLn "Failed to link!"
-
-          return ()
+          lib <- Data.ByteString.readFile productpath
+          cleanTempFilesExcept dflags []
+          return lib
       Nothing -> panic "failed to locate module"

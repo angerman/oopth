@@ -261,10 +261,9 @@ compileCoreExpr hsc_env srcspan ds_expr = do
   putStrLn "=== Compile Core Expr ==="
   prep_expr <- corePrepExpr dflags hsc_env ds_expr
   
-  buildDynamicLib dflags ds_expr
+  bs <- buildDynamicLib dflags ds_expr
 
   putStrLn "=== Contacting Runner ==="
-  bs <- B.readFile "a.out"
   let r  = TH.Q (runTh isNonQ js_env hsc_env dflags (eDeps prep_expr) ty bs "Nothing")
   res <- if isNonQ
     then TH.runQ r
