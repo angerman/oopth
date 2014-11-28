@@ -23,6 +23,13 @@ import           Data.Typeable
 import           GHC.Generics
 import           GHC.Exts
 
+import           Data.Binary             ( put, get )
+import           Data.Binary.Get
+import           Data.Binary.Put
+import qualified Data.ByteString.Lazy           as BL
+import           Network.Service         
+
+
 --import           GHCJS.Prim.TH.Serialized
 
 import qualified Language.Haskell.TH        as TH
@@ -64,6 +71,10 @@ data Message
   | QFail             String
   | QException        String
   deriving (Typeable, Generic)
+
+instance ServiceMessage Message where
+  toBS = BL.toStrict . runPut . put
+  fromBS = runGet get . BL.fromStrict
 
 instance Show Message where
   show (RunTH r bs mbloc)   = "RunTH " ++ show r ++ (show $ BS.length bs) ++ "bytes"

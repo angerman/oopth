@@ -72,8 +72,18 @@ import System.IO (hFlush, stdout, hPutStrLn, stderr)
 -- import Binary
 import Serialized
 
-import Network.Endpoints
-import Network.Transport.TCP
+
+import           Network.Simple.TCP
+import           Network.Service
+import           Network.Transport.Encoding.Base64 ( mkService )
+--------------------------------------------------------------------------------
+-- Service construction
+mkServiceClient :: ServiceMessage a => HostName -> ServiceName -> IO (Service a)
+mkServiceClient h p = connect h p mkService
+--------------------------------------------------------------------------------
+
+
+
 
 installOOPTHHook :: DynFlags -> DynFlags
 installOOPTHHook dyflags = dyflags { hooks = addHooks (hooks dyflags) }
@@ -190,26 +200,23 @@ getThRunner is_io dflags js_env hsc_env m = do
     Just r  -> TH.qRunIO (putMVar (thRunners js_env) runners) >> return r
     Nothing -> do
       r <- TH.qRunIO $ do
-          let master = "master"
-              slave  = "slave"
-              resolver = resolverFromList [(master, "localhost:2001"),
-                                           (slave,  "localhost:2000")]
-          transport <- newTCPTransport resolver
-          endpoint <- newEndpoint [transport]
-          Right () <- bindEndpoint endpoint master
-          return $ ThCourierRunner (receiveMessage endpoint) (sendMessage_ endpoint slave)
-          
+        service <- (mkServiceClient "127.0.0.1" "2000" :: IO (Service TH.Message))
+        return $ ThServiceRunner service          
       when (not is_io) $ TH.qAddModFinalizer (TH.Q $ finishTh is_io js_env m r)
       TH.qRunIO $ putMVar (thRunners js_env) (M.insert m r runners)
       return r
 
+
 sendToRunner :: ThRunner -> Int -> TH.Message -> IO ()
 sendToRunner runner responseTo msg =
-  sendToRunnerRaw runner responseTo (BL.toStrict . runPut . put $ msg)
+  sSend  (thrService runner) msg
+--  sendToRunnerRaw runner responseTo (BL.toStrict . runPut . put $ msg)
 
+{-
 sendToRunnerRaw :: ThRunner -> Int -> ByteString -> IO ()
 sendToRunnerRaw runner responseTo bs = do
   (thrSend runner) bs
+-}
 
 requestRunner :: Quasi m => Bool -> ThRunner -> TH.Message -> m TH.Message
 requestRunner is_io runner msg = TH.qRunIO (sendToRunner runner 0 msg) >> res
@@ -221,8 +228,7 @@ requestRunner is_io runner msg = TH.qRunIO (sendToRunner runner 0 msg) >> res
 readFromRunner :: ThRunner -> IO (TH.Message, Int)
 readFromRunner runner = do
   putStrLn "Reading..."
-  payload <- thrRecv runner
-  let msg = runGet get (BL.fromStrict payload)
+  msg <- sRecv (thrService runner)
   putStrLn "...Read"
   return (msg, 0)
 

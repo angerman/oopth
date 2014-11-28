@@ -57,12 +57,12 @@ data QState = QState { qsMap        :: Map TypeRep Dynamic    -- ^ persistent da
                      , qsFinalizers :: [TH.Q ()]              -- ^ registered finalizers (in reverse order)
                      , qsMessages   :: IORef [(Bool, String)] -- ^ messages reported
                      , qsLocation   :: Maybe TH.Loc           -- ^ location for current splice, if any
-                     , qsRecv       :: IO ByteString
-                     , qsSend       :: ByteString -> IO ()
+                     , qsRecv       :: IO T.Message
+                     , qsSend       :: T.Message -> IO ()
                      }
 instance Show QState where show _ = "<QState>"
 
-initQState :: IO ByteString -> (ByteString -> IO ()) -> IORef [(Bool, String)] -> QState
+initQState :: IO T.Message -> (T.Message -> IO ()) -> IORef [(Bool, String)] -> QState
 initQState recv send msgs = QState M.empty [] msgs Nothing recv send
 
 runModFinalizers :: GHCJSQ ()
@@ -111,14 +111,12 @@ sendRequest msg = sendResult msg >> awaitMessage
 
 sendResult :: T.Message -> GHCJSQ ()
 sendResult msg = GHCJSQ $ \s -> do
-  let bs = BL.toStrict $ runPut (put msg)
-  TH.qRunIO $ (qsSend s) bs
+  TH.qRunIO $ (qsSend s) msg
   return ((), s)
 
 awaitMessage :: GHCJSQ T.Message
 awaitMessage = GHCJSQ $ \s -> do
-  bs <- TH.qRunIO (qsRecv s)
-  let msg = runGet get (BL.fromStrict bs)
+  msg <- TH.qRunIO (qsRecv s)
   return (msg, s)
 
 instance TH.Quasi GHCJSQ where
@@ -182,7 +180,7 @@ convertAnnPayloads bs = catMaybes (map convert bs)
               | otherwise = Nothing
 
 -- | the Template Haskell server (Courier Edition)
-runTHServer :: IO ByteString -> (ByteString -> IO ()) ->  IO ()
+runTHServer :: IO T.Message -> (T.Message -> IO ()) ->  IO ()
 runTHServer recv send = do
   msgs <- newIORef []
   putStrLn $ "[Server] Starting..."

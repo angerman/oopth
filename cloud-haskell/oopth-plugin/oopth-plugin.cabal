@@ -21,6 +21,8 @@ library
                        OOPTH.Eval, OOPTH.Types, OOPTH.Settings, OOPTH.Hacks
   -- other-extensions:    
   build-depends:       base >=4.7 && <4.8
+                       ,network-service
+                       ,network-simple
                        ,ghc
                        ,ghc-prim
                        ,template-haskell
@@ -30,7 +32,6 @@ library
                        ,bytestring
                        ,binary
                        ,rank1dynamic
-                       ,courier
                       ,lens
                       ,text
   -- hs-source-dirs:      
@@ -41,8 +42,9 @@ executable ch-runner
   other-modules:       OOPTH.Eval, OOPTH.Types, OOPTH.Settings
   -- other-extensions:    
   build-depends:       base >=4.7 && <5
+                      ,network-service
+                      ,network-simple
                       ,ghc
-                      ,courier
                       ,binary
                       ,rank1dynamic
                       ,bytestring
