@@ -37,8 +37,8 @@ library
   -- hs-source-dirs:      
   default-language:    Haskell2010
 
-executable ch-runner
-  main-is:             CHRunner.hs
+executable th-runner
+  main-is:             OutOfProcTHRunner.hs
   other-modules:       OOPTH.Eval, OOPTH.Types, OOPTH.Settings
   -- other-extensions:    
   build-depends:       base >=4.7 && <5
