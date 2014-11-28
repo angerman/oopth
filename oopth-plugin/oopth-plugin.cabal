@@ -56,3 +56,18 @@ executable th-runner
                       ,text
 -- hs-source-dirs:      
   default-language:    Haskell2010
+
+executable debug-runner
+  main-is:             OutOfProcTHDebugRunner.hs
+  other-modules:       OOPTH.Data, OOPTH.Import
+  -- other-extensions:    
+  build-depends:       base >=4.7 && <5
+                      ,ghc
+                      ,binary
+                      ,bytestring
+                      ,template-haskell
+                      ,unix
+                      ,containers
+                      ,ghc-prim
+-- hs-source-dirs:      
+  default-language:    Haskell2010
