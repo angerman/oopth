@@ -260,8 +260,15 @@ compileCoreExpr hsc_env srcspan ds_expr = do
   -- see HscMain.hs:1653 for the default method.
   putStrLn "=== Compile Core Expr ==="
   prep_expr <- corePrepExpr dflags hsc_env ds_expr
+
+  -- TODO: obtain a number through an MVar or alike,
+  --       such that built dynamic libraries are
+  --       given separete numbers.
+  -- WARN: This will fail as soon as we have more
+  --       than one splice!
+  let n = 1
   
-  bs <- buildDynamicLib dflags ds_expr
+  bs <- buildDynamicLib n dflags ds_expr
 
   putStrLn "=== Contacting Runner ==="
   let r  = TH.Q (runTh isNonQ js_env hsc_env dflags (eDeps prep_expr) ty bs "Nothing")

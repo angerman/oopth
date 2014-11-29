@@ -26,6 +26,25 @@ import Data.Time.Clock( getCurrentTime )
 import SysTools
 import Data.ByteString( ByteString, readFile )
 
+
+--------------------------------------------------------------------------------
+-- getProcessID
+-- stolen from SysTools (because getProcessID is not exported :-/)
+#ifndef mingw32_HOST_OS
+import qualified System.Posix.Internals
+#else /* Must be Win32 */
+import Foreign
+import Foreign.C.String
+#endif
+
+#ifdef mingw32_HOST_OS
+foreign import ccall unsafe "_getpid" getProcessID :: IO Int -- relies on Int == Int32 on Windows
+#else
+getProcessID :: IO Int
+getProcessID = System.Posix.Internals.c_getpid >>= return . fromIntegral
+#endif
+--------------------------------------------------------------------------------
+
 -- libdir :: FilePath
 -- libdir  = GHC_PATHS_LIBDIR
 
@@ -75,8 +94,8 @@ myRunPhaseHook expr rp fp df = do
   liftIO $ putStrLn $ "Phase " ++ (showSDoc df . ppr) rp ++ " -> " ++ (showSDoc df . ppr) result
   return (result, filePath)
 
-buildDynamicLib :: DynFlags -> CoreExpr -> IO ByteString
-buildDynamicLib master_dflags expr = do
+buildDynamicLib :: Int -> DynFlags -> CoreExpr -> IO ByteString
+buildDynamicLib n master_dflags expr = do
 
   -- start a ghc session
   runGhc (Just $ topDir master_dflags) $ do
@@ -103,9 +122,9 @@ buildDynamicLib master_dflags expr = do
       touch dflags"File must exists, to be found" tmpFile
       now <- getCurrentTime
       return (tmpFile, now)
-
-    let --file = "ThCargo.hs"
-      moduleName = "ThCargo"
+    ghcProcId <- liftIO getProcessID
+    let --file = "ThRunner.hs"
+      moduleName = "GHC" ++ (show ghcProcId) ++ "ThRunner" ++ (show n)
       modName = mkModuleName moduleName
       targetId = --TargetModule modName --
                  TargetFile tmpFile Nothing
