@@ -288,7 +288,7 @@ compileCoreExpr hsc_env srcspan ds_expr = do
   -}
   -- we will just inject the current HPT intp the building. That should
   -- contain all required linkable objects.
-  bs <- buildDynamicLib n dflags (hsc_HPT hsc_env) ds_expr
+  bs <- buildDynamicLib n dflags (hsc_HPT hsc_env) ds_expr (show ty)
 
   putStrLn "=== Contacting Runner ==="
   let r  = TH.Q (runTh isNonQ js_env hsc_env dflags (eDeps prep_expr) ty bs "Nothing")

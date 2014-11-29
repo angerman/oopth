@@ -94,8 +94,8 @@ myRunPhaseHook expr rp fp df = do
   liftIO $ putStrLn $ "Phase " ++ (showSDoc df . ppr) rp ++ " -> " ++ (showSDoc df . ppr) result
   return (result, filePath)
 
-buildDynamicLib :: Int -> DynFlags -> HomePackageTable -> CoreExpr -> IO ByteString
-buildDynamicLib n master_dflags depHPT expr = do
+buildDynamicLib :: Int -> DynFlags -> HomePackageTable -> CoreExpr -> String -> IO ByteString
+buildDynamicLib n master_dflags depHPT expr ty = do
 
   -- start a ghc session
   runGhc (Just $ topDir master_dflags) $ do
@@ -128,21 +128,30 @@ buildDynamicLib n master_dflags depHPT expr = do
       modName = mkModuleName moduleName
       targetId = --TargetModule modName --
                  TargetFile tmpFile Nothing
+
+      -- compute the type synonym
+      (ts, placeholder) = case ty of
+        "Language.Haskell.TH.Syntax.Q Language.Haskell.TH.Syntax.Exp"   -> ("ExpQ", "LitE (StringL \"Nothing\")")
+        "Language.Haskell.TH.Syntax.Q [Language.Haskell.TH.Syntax.Dec]" -> ("DecsQ", "[FunD (Name (OccName \"placeholder\") NameS) []]")
+        "Language.Haskell.TH.Syntax.Q Language.Haskell.TH.Syntax.Pat"   -> ("PatQ", "WildP")
+        "Language.Haskell.TH.Syntax.Q Language.Haskell.TH.Lib.Type"     -> ("TypeQ", "ListT")
+      
       targetBody = unlines ["{-# LANGUAGE Rank2Types #-}"
                            ,"module " ++ moduleName ++ " where"
                            ,"import Foreign.StablePtr"
-                           ,"import Language.Haskell.TH.Lib ( ExpQ )"
-                           ,"import Language.Haskell.TH.Syntax ( Quasi, Exp(LitE), Lit(StringL) )"
+                           ,"import Language.Haskell.TH.Lib ( " ++ ts ++" )"
+                           ,"import Language.Haskell.TH.Syntax"
 
                            ,"foreign export ccall \"getAction\" getAction :: IO (StablePtr Action)"
 
-                           ,"data Action = QuasiAction  (ExpQ)"
+                           ,"data Action = QuasiAction  (" ++ ts ++")"
 
                            ,"getAction :: IO (StablePtr Action)"
                            ,"getAction = newStablePtr $ QuasiAction shippedSplice"
 
-                           ,"shippedSplice :: ExpQ"
-                           ,"shippedSplice = return $ LitE (StringL \"Nothing\")"]
+                           ,"shippedSplice :: " ++ ts
+                           ,"shippedSplice = return $ " ++ placeholder
+                           ]--return $ ]
 
       targetContents = Just (stringToStringBuffer targetBody, now)
       target = --Target  True Nothing

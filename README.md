@@ -35,7 +35,9 @@ oopth $ cabal install oopth-plugin --reinstall
 # launch the runner
 oopth $ .cabal-sandbox/bin/th-runner slave &
 # compile some module with a TH splice.
-oopth $ cabal exec ghc -- Test/Simple.hs -package ghc -package oopth-plugin -fplugin OutOfProcTHPlugin
+oopth $ cabal exec ghc -- Test/Simple.hs -package ghc -package oopth-plugin -fplugin OutOfProcTHPlugin -dynamic
+# or with the llvm backend:
+oopth $ cabal exec ghc -- Test/Simple.hs -package ghc -package oopth-plugin -fplugin OutOfProcTHPlugin -dynamic -fllvm
 # check that the binary is working.
 oopth $ ./Test/Simple
 ```
