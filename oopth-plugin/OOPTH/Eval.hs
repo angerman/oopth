@@ -58,13 +58,14 @@ data QState = QState { qsMap        :: Map TypeRep Dynamic    -- ^ persistent da
                      , qsFinalizers :: [TH.Q ()]              -- ^ registered finalizers (in reverse order)
                      , qsMessages   :: IORef [(Bool, String)] -- ^ messages reported
                      , qsLocation   :: Maybe TH.Loc           -- ^ location for current splice, if any
-                     , qsRecv       :: IO T.Message
-                     , qsSend       :: T.Message -> IO ()
+                     , qsRecv       :: IO T.SeqMessage
+                     , qsSend       :: T.SeqMessage -> IO ()
+                     , qsReqN       :: Int
                      }
 instance Show QState where show _ = "<QState>"
 
-initQState :: IO T.Message -> (T.Message -> IO ()) -> IORef [(Bool, String)] -> QState
-initQState recv send msgs = QState M.empty [] msgs Nothing recv send
+initQState :: IO T.SeqMessage -> (T.SeqMessage -> IO ()) -> IORef [(Bool, String)] -> QState
+initQState recv send msgs = QState M.empty [] msgs Nothing recv send 1
 
 runModFinalizers :: GHCJSQ ()
 runModFinalizers = go =<< getState
@@ -108,16 +109,20 @@ noLoc :: TH.Loc
 noLoc = TH.Loc "<no file>" "<no package>" "<no module>" (0,0) (0,0)
 
 sendRequest :: T.Message -> GHCJSQ T.Message
-sendRequest msg = sendResult msg >> awaitMessage
+sendRequest req = GHCJSQ $ \s -> do
+  let reqN = qsReqN s
+  TH.qRunIO $ (qsSend s) (T.ReqMessage reqN req)
+  T.RespMessage reqN resp <- TH.qRunIO (qsRecv s)
+  return (resp, s { qsReqN = reqN + 1 })
 
 sendResult :: T.Message -> GHCJSQ ()
 sendResult msg = GHCJSQ $ \s -> do
-  TH.qRunIO $ (qsSend s) msg
+  TH.qRunIO $ (qsSend s) (T.ReqMessage 0 msg)
   return ((), s)
 
 awaitMessage :: GHCJSQ T.Message
 awaitMessage = GHCJSQ $ \s -> do
-  msg <- TH.qRunIO (qsRecv s)
+  T.RespMessage _ msg <- TH.qRunIO (qsRecv s)
   return (msg, s)
 
 instance TH.Quasi GHCJSQ where
@@ -182,8 +187,8 @@ convertAnnPayloads bs = catMaybes (map convert bs)
 
 -- | the Template Haskell server (Courier Edition)
 runTHServer :: MVar Int -- ^ the mvar to extract the server number from.
-            -> IO T.Message -- ^ the receive action, should dispatch a message or block until one is available.
-            -> (T.Message -> IO ()) -- ^ the send action, takes a message and returns nothing
+            -> IO T.SeqMessage -- ^ the receive action, should dispatch a message or block until one is available.
+            -> (T.SeqMessage -> IO ()) -- ^ the send action, takes a message and returns nothing
             ->  IO ()
 runTHServer mi recv send = do
   msgs <- newIORef []

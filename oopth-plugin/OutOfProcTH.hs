@@ -175,7 +175,7 @@ runTh is_io js_env hsc_env dflags expr_pkgs ty code symb = do
 --      qRunIO $ putStrLn "[runTh / Just _ _] Requesting Runner"
       hv <- requestRunner is_io r (TH.RunTH tht bs loc) >>= \case
               TH.RunTH' bsr -> getHv bsr
-              _             -> error "runTh: unexpected response, expected RunTH' message"
+              m             -> error $ "runTh: unexpected response, expected RunTH' message; got " ++ (show m)
 --      TH.qRunIO $ putMVar (thrBase r) (Gen2.linkBase lr)
       TH.qRunIO $ putStrLn "[runTh / Just _ _] Received Result. Done."
       return hv
@@ -201,7 +201,7 @@ getThRunner is_io dflags js_env hsc_env m = do
     Just r  -> TH.qRunIO (putMVar (thRunners js_env) runners) >> return r
     Nothing -> do
       r <- TH.qRunIO $ do
-        service <- (mkServiceClient "127.0.0.1" "2000" :: IO (Service TH.Message))
+        service <- (mkServiceClient "127.0.0.1" "2000" :: IO (Service TH.SeqMessage))
         return $ ThServiceRunner service          
       when (not is_io) $ TH.qAddModFinalizer (TH.Q $ finishTh is_io js_env m r)
       TH.qRunIO $ putMVar (thRunners js_env) (M.insert m r runners)
@@ -210,7 +210,7 @@ getThRunner is_io dflags js_env hsc_env m = do
 
 sendToRunner :: ThRunner -> Int -> TH.Message -> IO ()
 sendToRunner runner responseTo msg =
-  sSend  (thrService runner) msg
+  sSend  (thrService runner) (TH.RespMessage responseTo msg)
 --  sendToRunnerRaw runner responseTo (BL.toStrict . runPut . put $ msg)
 
 {-
@@ -229,9 +229,9 @@ requestRunner is_io runner msg = TH.qRunIO (sendToRunner runner 0 msg) >> res
 readFromRunner :: ThRunner -> IO (TH.Message, Int)
 readFromRunner runner = do
   putStrLn "Reading..."
-  msg <- sRecv (thrService runner)
+  TH.ReqMessage n msg <- sRecv (thrService runner)
   putStrLn "...Read"
-  return (msg, 0)
+  return (msg, n)
 
 handleRunnerReq :: Quasi m => Bool -> ThRunner -> TH.Message -> m TH.Message
 handleRunnerReq is_io runner msg = case msg of

@@ -14,7 +14,7 @@ import           System.Process
 import           Module
 
 import           Network.Service        (Service)
-import           OOPTH.Types            (Message)
+import           OOPTH.Types            (SeqMessage)
 
 
 {- | We can link incrementally against a base bundle, where we assume
@@ -90,7 +90,7 @@ data ThRunner =
            , thrHandleErr      :: Handle
 --           , thrBase           :: MVar Base
            }
-  | ThServiceRunner { thrService :: Service Message }
+  | ThServiceRunner { thrService :: Service SeqMessage }
 
 data GhcjsEnv = GhcjsEnv
   { compiledModules :: MVar (Map Module ByteString) -- ^ keep track of already compiled modules so we don't compile twice for dynamic-too

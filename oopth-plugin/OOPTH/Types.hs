@@ -10,8 +10,9 @@
  -}
 
 module OOPTH.Types ( Message(..)
-                           , THResultType(..)
-                           ) where
+                   , SeqMessage(..)
+                   , THResultType(..)
+                   ) where
 
 import           Control.Applicative
 
@@ -72,9 +73,14 @@ data Message
   | QException        String
   deriving (Typeable, Generic)
 
-instance ServiceMessage Message where
+data SeqMessage = ReqMessage Int Message
+                | RespMessage Int Message
+                deriving (Typeable, Generic)
+
+instance ServiceMessage SeqMessage where
   toBS = BL.toStrict . runPut . put
   fromBS = runGet get . BL.fromStrict
+
 
 instance Show Message where
   show (RunTH r bs mbloc)   = "RunTH " ++ show r ++ (show $ BS.length bs) ++ "bytes"
@@ -106,6 +112,7 @@ instance Show Message where
 
 instance Binary THResultType
 instance Binary Message
+instance Binary SeqMessage
 
 deriving instance Generic TH.Loc
 deriving instance Generic TH.Name

@@ -35,12 +35,12 @@ main = do
   case args of
     ["master"] -> undefined
     ["test", host, port] -> do
-      service <- (mkServiceClient host port :: IO (Service Message))
+      service <- (mkServiceClient host port :: IO (Service SeqMessage))
       sTerm service
     ["slave"] -> newMVar 1 >>= \n -> mkServiceServer "2000" (handler n)
     _  -> putStrLn $ "Usage: " ++ prog ++ " (server|client)"
 
-  where handler :: MVar Int -> ServiceHandler Message
+  where handler :: MVar Int -> ServiceHandler SeqMessage
         handler mi service = runTHServer mi (sRecv service) (sSend service)
 
 
