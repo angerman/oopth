@@ -57,6 +57,7 @@ import PprCore (pprCoreExpr)
 -- printing
 import qualified Outputable                     as O
 
+import UniqFM
 import UniqSet
 import           Control.Lens     ((^..))
 import           Data.Data.Lens   (template)
@@ -267,8 +268,27 @@ compileCoreExpr hsc_env srcspan ds_expr = do
   -- WARN: This will fail as soon as we have more
   --       than one splice!
   let n = 1
-  
-  bs <- buildDynamicLib n dflags ds_expr
+
+  -- Some debug information about the "linked" dependencies.
+  {-
+  putStrLn "=== Package Deps ========"
+  putStrLn $ unwords $ map (show . packageIdString) (eDeps prep_expr)
+  putStrLn "=== Module Deps ========="  
+  putStrLn $ unwords $ map (show . moduleNameString) (mDeps prep_expr)
+  putStrLn "=== Package Deps (2) ===="
+  let hpt = hsc_HPT hsc_env
+      home_mod_infos = eltsUFM hpt
+      pkg_deps :: [PackageId]
+      pkg_deps  = concatMap (map fst . dep_pkgs . mi_deps . hm_iface) home_mod_infos
+      linkables :: [Linkable]
+      linkables = map (expectJust "link" . hm_linkable) home_mod_infos
+  putStrLn $ unwords $ map (show . packageIdString) pkg_deps
+  putStrLn "=== Linkables ==========="
+  putStrLn $ unwords $ map (show . moduleNameString . moduleName . linkableModule) linkables
+  -}
+  -- we will just inject the current HPT intp the building. That should
+  -- contain all required linkable objects.
+  bs <- buildDynamicLib n dflags (hsc_HPT hsc_env) ds_expr
 
   putStrLn "=== Contacting Runner ==="
   let r  = TH.Q (runTh isNonQ js_env hsc_env dflags (eDeps prep_expr) ty bs "Nothing")
@@ -290,9 +310,84 @@ compileCoreExpr hsc_env srcspan ds_expr = do
 --    mod n    = mkModule pkg (mkModuleName $ "ThRunner" ++ show n)
 --    pkg      = stringToPackageKey "thrunner"
     dflags   = hsc_dflags hsc_env
+    mDeps e  = uniqSetToList . mkUniqSet . catMaybes $ map (fmap moduleName . nameModule_maybe . idName) (e ^.. template)
     eDeps e  = uniqSetToList . mkUniqSet . catMaybes $ map (fmap modulePackageId . nameModule_maybe . idName) (e ^.. template)
 
+{-
+linkTh :: GhcjsSettings        -- settings (contains the base state)
+       -> [FilePath]           -- extra js files
+       -> DynFlags             -- dynamic flags
+       -> [PackageId]
+       -> HomePackageTable     -- what to link
+       -> Maybe ByteString     -- current module or Nothing to get the initial code + rts
+       -> IO Gen2.LinkResult
+linkTh settings js_files dflags expr_pkgs hpt code = do
+  let home_mod_infos = eltsUFM hpt
+      pidMap    = pkgIdMap (pkgState dflags)
+      pkg_deps :: [PackageId]
+      pkg_deps  = concatMap (map fst . dep_pkgs . mi_deps . hm_iface) home_mod_infos
+      linkables = map (expectJust "link".hm_linkable) home_mod_infos
+      getOfiles (LM _ _ us) = map nameOfObject (filter isObject us)
+      -- fixme include filename here?
+      obj_files = maybe [] (\b -> Left ("<Template Haskell>", b) : map Right (concatMap getOfiles linkables)) code
+      packageLibPaths :: PackageId -> [FilePath]
+      packageLibPaths pkg = maybe [] libraryDirs (lookupPackage pidMap pkg)
+      dflags' = dflags { ways = WayDebug : ways dflags }
+  -- link all packages that TH depends on, error if not configured
+  (th_deps_pkgs, mk_th_deps) <- Gen2.thDeps dflags'
+  (rts_deps_pkgs, _) <- Gen2.rtsDeps dflags'
+  expr_pkgs_deps <- packageDeps dflags expr_pkgs
+  let addDep pkgs name
+        | any (matchPackageName name) pkgs = pkgs
+        | otherwise = lookupRequiredPackage dflags "to run Template Haskell" name : pkgs
+      pkg_deps' = closeDeps dflags (L.foldl' addDep pkg_deps (th_deps_pkgs ++ rts_deps_pkgs) ++ expr_pkgs_deps)
+      th_deps   = mk_th_deps pkg_deps'
+      th_deps'  = T.pack $ (show . L.nub . L.sort . map Gen2.funPackage . S.toList $ th_deps) ++ show (ways dflags')
+      deps      = map (\pkg -> (pkg, packageLibPaths pkg)) pkg_deps'
+      is_root   = const True
+      -- pkgs      = map packageConfigId . eltsUFM . pkgIdMap . pkgState $ dflags
+      link      = Gen2.link' dflags' settings "template haskell" [] deps obj_files js_files is_root th_deps
+  if isJust code
+     then link
+     else Gen2.getCached dflags' "template-haskell" th_deps' >>= \case
+            Just c  -> return (runGet get $ BL.fromStrict c)
+            Nothing -> do
+              lr <- link
+              Gen2.putCached dflags' "template-haskell" th_deps'
+                              [topDir dflags </> "ghcjs_boot.completed"]
+                              (BL.toStrict . runPut . put $ lr)
+              return lr
+-}
+{-
+-- this is a hack because we don't have a TcGblEnv. Fix before 7.10
+packageDeps :: DynFlags -> [PackageId] -> IO [PackageId]
+packageDeps dflags pkgs = do
+  let allPkgIds = map packageConfigId . eltsUFM . pkgIdMap . pkgState $ dflags
+  configs <- filter ((`elem`pkgs) . packageConfigId) <$> getPreloadPackagesAnd dflags (filter (`elem` allPkgIds) pkgs)
+  let allDeps = L.nub . map (\(InstalledPackageId i) -> i) . concatMap depends $ configs
+  return $ filter (\p -> any (L.isPrefixOf (packageIdString p)) allDeps || p `elem` pkgs) allPkgIds
 
+-- get the closure the dependency graph
+closeDeps :: DynFlags -> [PackageId] -> [PackageId]
+closeDeps dflags pkgs = map packageConfigId $ go (map getInstalledPackage pkgs)
+  where
+    p       = pkgIdMap . pkgState $ dflags
+    allPkgs = eltsUFM . pkgIdMap . pkgState $ dflags
+    getInstalledPackage pkgId =
+      fromMaybe (error ("cannot find package " ++ show pkgId)) (lookupPackage p pkgId)
+    lookupInstalledPackage ipid =
+      case filter ((==ipid) . installedPackageId) allPkgs of
+        (x:_) -> x
+        _     -> error $ "cannot find package id " ++ show ipid
+    go :: [PackageConfig] -> [PackageConfig]
+    go xs
+      | length xs == length xs' = xs
+      | otherwise               = go xs'
+      where
+        xs' = L.nubBy ((==) `on` installedPackageId) $
+              concatMap (\x -> x : map lookupInstalledPackage (depends x)) xs
+
+-}
 -- for some reason this doesn't work, although it seems to do the same as the code below
 -- myReifyAnnotations :: TH.Quasi m => TH.AnnLookup -> m [[Word8]]
 -- myReifyAnnotations = TH.qReifyAnnotations

@@ -11,7 +11,7 @@ import Outputable     ( panic )
 import GHC
 import Packages
 import Data.List      ( find )
-import UniqFM         ( unitUFM )
+import UniqFM         ( unitUFM, addToUFM )
 import Hooks          ( hscCompileOneShotHook, runPhaseHook )
 import Outputable     ( showSDoc, ppr )
 
@@ -94,8 +94,8 @@ myRunPhaseHook expr rp fp df = do
   liftIO $ putStrLn $ "Phase " ++ (showSDoc df . ppr) rp ++ " -> " ++ (showSDoc df . ppr) result
   return (result, filePath)
 
-buildDynamicLib :: Int -> DynFlags -> CoreExpr -> IO ByteString
-buildDynamicLib n master_dflags expr = do
+buildDynamicLib :: Int -> DynFlags -> HomePackageTable -> CoreExpr -> IO ByteString
+buildDynamicLib n master_dflags depHPT expr = do
 
   -- start a ghc session
   runGhc (Just $ topDir master_dflags) $ do
@@ -179,7 +179,8 @@ buildDynamicLib n master_dflags expr = do
 
           productpath <- newTempName dflags'' ".so"
           
-          linked <- link (ghcLink dflags'') (dflags'' { outputFile = Just productpath }) True (unitUFM (ms_mod modSummary) hmi)
+          linked <- link (ghcLink dflags'') (dflags'' { outputFile = Just productpath }) True $
+                    addToUFM depHPT (ms_mod modSummary) hmi
           case linked of
             Succeeded -> putStrLn "Linked!"
             Failed    -> putStrLn "Failed to link!"
