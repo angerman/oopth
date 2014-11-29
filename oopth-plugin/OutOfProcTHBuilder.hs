@@ -101,7 +101,7 @@ buildDynamicLib n master_dflags expr = do
   runGhc (Just $ topDir master_dflags) $ do
     dflags_ <- getDynFlags
     -- adjust the dynflags to contain RankNTypes.
-    let dflags = (dflags_ `xopt_set` Opt_RankNTypes) { verbosity = 3 }
+    let dflags = (dflags_ `xopt_set` Opt_RankNTypes) { verbosity = verbosity master_dflags }
     -- configure the dynflags by parsing -no-hs-main, -dynamic and -shared.
     -- -dcore-lint will throw us off, as soon as our core turns up invalid!
     (dflags', _, _) <- parseDynamicFlagsCmdLine dflags $ map noLoc (words "-no-hs-main -dynamic -shared -dcore-lint")
