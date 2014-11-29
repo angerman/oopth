@@ -6,7 +6,7 @@ import           Data.ByteString.Char8   ( pack, unpack )
 import           System.Environment      ( getProgName, getArgs )
 import           Control.Monad           ( unless )
 
-import           Control.Concurrent      ( threadDelay )
+import           Control.Concurrent      ( threadDelay, MVar, newMVar )
 
 import qualified Language.Haskell.TH        as TH
 import qualified Language.Haskell.TH.Syntax as TH
@@ -37,11 +37,11 @@ main = do
     ["test", host, port] -> do
       service <- (mkServiceClient host port :: IO (Service Message))
       sTerm service
-    ["slave"] -> mkServiceServer "2000" handler
+    ["slave"] -> newMVar 1 >>= \n -> mkServiceServer "2000" (handler n)
     _  -> putStrLn $ "Usage: " ++ prog ++ " (server|client)"
 
-  where handler :: ServiceHandler Message
-        handler service = runTHServer (sRecv service) (sSend service)
+  where handler :: MVar Int -> ServiceHandler Message
+        handler mi service = runTHServer mi (sRecv service) (sSend service)
 
 
 -- TODO:

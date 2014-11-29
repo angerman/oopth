@@ -50,6 +50,7 @@ import           System.IO
 
 import           Unsafe.Coerce
 
+import           Control.Concurrent        (MVar, modifyMVar)
 -- DyLib loading
 import           OOPTH.Import              (loadQuasiActionFromLibrary)
 
@@ -180,11 +181,16 @@ convertAnnPayloads bs = catMaybes (map convert bs)
               | otherwise = Nothing
 
 -- | the Template Haskell server (Courier Edition)
-runTHServer :: IO T.Message -> (T.Message -> IO ()) ->  IO ()
-runTHServer recv send = do
+runTHServer :: MVar Int -- ^ the mvar to extract the server number from.
+            -> IO T.Message -- ^ the receive action, should dispatch a message or block until one is available.
+            -> (T.Message -> IO ()) -- ^ the send action, takes a message and returns nothing
+            ->  IO ()
+runTHServer mi recv send = do
   msgs <- newIORef []
+  -- get a new server number.
+  serverN <- modifyMVar mi $ \i -> return (i+1,i)
   putStrLn $ "[Server] Starting..."
-  void (runGHCJSQ server (initQState recv send msgs)) {-`E.catches`
+  void (runGHCJSQ (server serverN 0) (initQState recv send msgs)) {-`E.catches`
     [ E.Handler $ \(GHCJSQException _ msg) -> sendReportedMessages' msgs >> void (sendRequest $ T.QFail msg)
     , E.Handler $ \(E.SomeException e)     -> sendReportedMessages' msgs >> void (sendRequest $ T.QException (show e))
     ]-}
@@ -192,20 +198,22 @@ runTHServer recv send = do
 --    server :: GHCJSQ a
     log :: String -> GHCJSQ ()
     log = TH.qRunIO . putStrLn
-    server = do
+    -- server takes a server and an iternation number.
+    -- server :: Int -> Int -> IO (a, QState)
+    server n i = do
       log "[Server] Waiting for Message"
       msg <- awaitMessage
       log "[Server] Received Message"
       case msg of
         T.RunTH t code loc -> do
           log "[Server] Loading code..."
-          a <- TH.qRunIO (loadCode code)
+          a <- TH.qRunIO (loadCode n i code)
           log "[Server] Running TH..."
           runTH t a loc
           log "[Server] Reporting Messages..."
           sendReportedMessages
           log "[Server] Recur..."
-          server
+          server n (i + 1)
         T.FinishTH -> do
           runModFinalizers
           sendReportedMessages
@@ -234,15 +242,14 @@ runTHCode :: Binary a => TH.Q a -> GHCJSQ ByteString
 runTHCode c = BL.toStrict . runPut . put <$> TH.runQ c
 
 {-# NOINLINE loadCode #-}
-loadCode :: ByteString -> IO Any
-loadCode bs = do
---  p <- fromBs bs
-  let lib = "code.dylib"
-  putStrLn "[Server] Writing lib..."
+loadCode :: Int -> Int -> ByteString -> IO Any
+loadCode serverN iterN bs = do
+  let lib = "code_" ++ (show serverN) ++ "_" ++ (show iterN) ++ ".dylib"
+  putStrLn $ "[Server] Writing lib (" ++ lib ++ ")..."
   _ <- B.writeFile  lib bs
-  putStrLn "[Server] Loading Action..."
+  putStrLn $ "[Server] Loading Action..."
   a <- loadQuasiActionFromLibrary lib
-  putStrLn "[Server] Returning Action..."
+  putStrLn $ "[Server] Returning Action..."
   return a
 
 sendReportedMessages :: GHCJSQ ()
