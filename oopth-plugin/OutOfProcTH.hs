@@ -84,12 +84,12 @@ mkServiceClient h p = connect h p mkService
 --------------------------------------------------------------------------------
 
 
+type CommandLineOption = String
 
-
-installOOPTHHook :: DynFlags -> DynFlags
-installOOPTHHook dyflags = dyflags { hooks = addHooks (hooks dyflags) }
+installOOPTHHook :: [CommandLineOption] -> DynFlags -> DynFlags
+installOOPTHHook opts dyflags = dyflags { hooks = addHooks (hooks dyflags) }
   where
-    addHooks h = h { hscCompileCoreExprHook = Just compileCoreExpr }
+    addHooks h = h { hscCompileCoreExprHook = Just $ compileCoreExpr opts }
 
 myResult :: HValue
 myResult = unsafeCoerce myExampleExpr
@@ -254,8 +254,8 @@ handleRunnerReq is_io runner msg = case msg of
 
 
 -- most of this is an adapation from ghcjsCompileCoreExpr (Gen2.TH from ghcjs)
-compileCoreExpr :: HscEnv -> SrcSpan -> CoreExpr -> IO HValue
-compileCoreExpr hsc_env srcspan ds_expr = do
+compileCoreExpr :: [CommandLineOption] -> HscEnv -> SrcSpan -> CoreExpr -> IO HValue
+compileCoreExpr opts hsc_env srcspan ds_expr = do
   
   js_env  <- newGhcjsEnv
   -- see HscMain.hs:1653 for the default method.

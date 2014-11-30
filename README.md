@@ -21,8 +21,9 @@ cripled by the absents of the Template Haskell facility.
 ## Usage
 
 You will currently need to have a patched ghc, the following patch can be used with ghc-7.8.3
-<https://gist.github.com/4d3e8da8143d7986bf63>. The patch allows plugins to install hooks, which
-is how the out-of-proc-th soluction currently works.
+<https://gist.github.com/7db11c24f8935c73fcf5>. The patch allows plugins to install hooks, which
+is how the out-of-proc-th soluction currently works. A patch for ghc-7.10 can be found in
+phabricator: <https://phabricator.haskell.org/D535>
 
 Next, I recommend using a sandbox and install the plugin there.
 
