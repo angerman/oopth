@@ -43,6 +43,10 @@ oopth $ cabal exec ghc -- Test/Simple.hs -package ghc -package oopth-plugin -fpl
 oopth $ ./Test/Simple
 ```
 
+## Todo
+
+See the Issues for open issues and discussion on how to proceed.
+
 ## Links
 
 - [ghcjs](https://github.com/ghcjs/ghcjs)
