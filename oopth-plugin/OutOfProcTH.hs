@@ -59,8 +59,8 @@ import qualified Outputable                     as O
 
 import UniqFM
 import UniqSet
-import           Control.Lens     ((^..))
-import           Data.Data.Lens   (template)
+--import           Control.Lens     ((^..))
+--import           Data.Data.Lens   (template)
 import qualified Data.Map                       as M
 
 import Maybes
@@ -136,7 +136,7 @@ runTh :: forall m. Quasi m
       -> ByteString -- ^ in-memory object of the compiled CoreExpr
       -> Text       -- ^ JavaScript symbol name that the expression is bound to
       -> m HValue
-runTh is_io js_env hsc_env dflags expr_pkgs ty code symb = do
+runTh is_io js_env hsc_env dflags _ {- expr_pkgs -} ty code symb = do
 --  qRunIO $ putStrLn "[runTh] Begin"
   loc <- if is_io then return Nothing
                   else Just <$> TH.qLocation
@@ -291,7 +291,7 @@ compileCoreExpr opts hsc_env srcspan ds_expr = do
   bs <- buildDynamicLib n dflags (hsc_HPT hsc_env) ds_expr (show ty)
 
   putStrLn "=== Contacting Runner ==="
-  let r  = TH.Q (runTh isNonQ js_env hsc_env dflags (eDeps prep_expr) ty bs "Nothing")
+  let r  = TH.Q (runTh isNonQ js_env hsc_env dflags [] {- (eDeps prep_expr) -} ty bs "Nothing")
   res <- if isNonQ
     then TH.runQ r
     else return (unsafeCoerce r)
@@ -310,8 +310,8 @@ compileCoreExpr opts hsc_env srcspan ds_expr = do
 --    mod n    = mkModule pkg (mkModuleName $ "ThRunner" ++ show n)
 --    pkg      = stringToPackageKey "thrunner"
     dflags   = hsc_dflags hsc_env
-    mDeps e  = uniqSetToList . mkUniqSet . catMaybes $ map (fmap moduleName . nameModule_maybe . idName) (e ^.. template)
-    eDeps e  = uniqSetToList . mkUniqSet . catMaybes $ map (fmap modulePackageId . nameModule_maybe . idName) (e ^.. template)
+--    mDeps e  = uniqSetToList . mkUniqSet . catMaybes $ map (fmap moduleName . nameModule_maybe . idName) (e ^.. template)
+--    eDeps e  = uniqSetToList . mkUniqSet . catMaybes $ map (fmap modulePackageId . nameModule_maybe . idName) (e ^.. template)
 
 {-
 linkTh :: GhcjsSettings        -- settings (contains the base state)
